@@ -1,53 +1,50 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 import json
 import logging
 import shutil
 import smtplib
 import sys
-from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
-from typing import List, Tuple
 
 
-@dataclass
-class MailConfig:
-    smtp_host: str
-    smtp_port: int
-    smtp_username: str
-    smtp_password: str
-    use_tls: bool
-    from_email: str
-    to_email: List[str]
-    cc_email: List[str]
-    error_email: List[str]
-    subject: str
-    body: str
+class MailConfig(object):
+    def __init__(self, smtp_host, smtp_port, smtp_username, smtp_password, use_tls,
+                 from_email, to_email, cc_email, error_email, subject, body):
+        self.smtp_host = smtp_host
+        self.smtp_port = smtp_port
+        self.smtp_username = smtp_username
+        self.smtp_password = smtp_password
+        self.use_tls = use_tls
+        self.from_email = from_email
+        self.to_email = to_email
+        self.cc_email = cc_email
+        self.error_email = error_email
+        self.subject = subject
+        self.body = body
 
 
-@dataclass
-class AppConfig:
-    source_dir: Path
-    archive_dir: Path
-    delete_sent_folders: bool
-    log_file: Path
-    mail: MailConfig
+class AppConfig(object):
+    def __init__(self, source_dir, archive_dir, delete_sent_folders, log_file, mail):
+        self.source_dir = source_dir
+        self.archive_dir = archive_dir
+        self.delete_sent_folders = delete_sent_folders
+        self.log_file = log_file
+        self.mail = mail
 
 
-@dataclass
-class ScanResult:
-    valid_dirs: List[Path]
-    invalid_dirs: List[Tuple[Path, str]]
-    orphan_files: List[Tuple[Path, str]]
+class ScanResult(object):
+    def __init__(self, valid_dirs, invalid_dirs, orphan_files):
+        self.valid_dirs = valid_dirs
+        self.invalid_dirs = invalid_dirs
+        self.orphan_files = orphan_files
 
 
 REQUIRED_EXTENSIONS = {".dbf", ".xls"}
 
 
-def load_config(config_path: Path) -> AppConfig:
+def load_config(config_path):
     with config_path.open("r", encoding="utf-8") as f:
         raw = json.load(f)
 
@@ -84,31 +81,31 @@ def load_config(config_path: Path) -> AppConfig:
     )
 
 
-def _to_list(value: str | List[str]) -> List[str]:
+def _to_list(value):
     if isinstance(value, str):
         return [value]
     return list(value)
 
 
-def setup_logging(log_file: Path) -> None:
+def setup_logging(log_file):
     log_file.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s",
         handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
+            logging.FileHandler(str(log_file), encoding="utf-8"),
             logging.StreamHandler(sys.stdout),
         ],
     )
 
 
-def scan_source_dir(source_dir: Path) -> ScanResult:
-    valid_dirs: List[Path] = []
-    invalid_dirs: List[Tuple[Path, str]] = []
-    orphan_files: List[Tuple[Path, str]] = []
+def scan_source_dir(source_dir):
+    valid_dirs = []
+    invalid_dirs = []
+    orphan_files = []
 
     if not source_dir.exists() or not source_dir.is_dir():
-        raise FileNotFoundError(f"Source directory not found: {source_dir}")
+        raise FileNotFoundError("Source directory not found: {}".format(source_dir))
 
     for child in sorted(source_dir.iterdir()):
         if child.is_dir():
@@ -120,7 +117,7 @@ def scan_source_dir(source_dir: Path) -> ScanResult:
                 invalid_dirs.append(
                     (
                         child,
-                        f"Найдено {len(files)} файла(ов), требуется ровно 2 файла (.dbf и .xls). Найденные файлы: {', '.join(file_names) if file_names else 'нет файлов'}",
+                        "Найдено {} файла(ов), требуется ровно 2 файла (.dbf и .xls). Найденные файлы: {}".format(len(files), ', '.join(file_names) if file_names else 'нет файлов'),
                     )
                 )
                 continue
@@ -129,7 +126,7 @@ def scan_source_dir(source_dir: Path) -> ScanResult:
                 invalid_dirs.append(
                     (
                         child,
-                        f"Требуются файлы .dbf и .xls. Найдены: {', '.join(file_names)}",
+                        "Требуются файлы .dbf и .xls. Найдены: {}".format(', '.join(file_names)),
                     )
                 )
                 continue
@@ -138,7 +135,7 @@ def scan_source_dir(source_dir: Path) -> ScanResult:
                 invalid_dirs.append(
                     (
                         child,
-                        f"Требуется ровно один файл .dbf и один файл .xls. Найдены: {', '.join(file_names)}",
+                        "Требуется ровно один файл .dbf и один файл .xls. Найдены: {}".format(', '.join(file_names)),
                     )
                 )
                 continue
@@ -150,29 +147,32 @@ def scan_source_dir(source_dir: Path) -> ScanResult:
                 orphan_files.append(
                     (
                         child,
-                        f"Файл {child.name} найден вне папки. Требуется разместить в подпапке с парным файлом",
+                        "Файл {} найден вне папки. Требуется разместить в подпапке с парным файлом".format(child.name),
                     )
                 )
 
     return ScanResult(valid_dirs=valid_dirs, invalid_dirs=invalid_dirs, orphan_files=orphan_files)
 
 
-def create_archive(source_dirs: List[Path], archive_dir: Path) -> Path:
+def create_archive(source_dirs, archive_dir):
     archive_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_root = archive_dir / f"subsidies_{timestamp}"
+    timestamp = datetime.now().strftime("%Y%m%d")
+    date_folder = archive_dir / timestamp
+    date_folder.mkdir(parents=True, exist_ok=True)
+    
+    temp_root = date_folder / "subsidies_{}".format(datetime.now().strftime('%H%M%S'))
     temp_root.mkdir(parents=True, exist_ok=True)
 
     for source_dir in source_dirs:
         destination = temp_root / source_dir.name
-        shutil.copytree(source_dir, destination)
+        shutil.copytree(str(source_dir), str(destination))
 
-    archive_path = shutil.make_archive(str(temp_root), "zip", root_dir=temp_root)
-    shutil.rmtree(temp_root)
+    archive_path = shutil.make_archive(str(temp_root), "zip", root_dir=str(temp_root))
+    shutil.rmtree(str(temp_root))
     return Path(archive_path)
 
 
-def send_email_with_attachment(config: AppConfig, attachment_path: Path) -> None:
+def send_email_with_attachment(config, attachment_path):
     msg = EmailMessage()
     msg["Subject"] = config.mail.subject
     msg["From"] = config.mail.from_email
@@ -199,7 +199,7 @@ def send_email_with_attachment(config: AppConfig, attachment_path: Path) -> None
         smtp.send_message(msg, to_addrs=recipients)
 
 
-def send_error_email(config: AppConfig, subject: str, body: str) -> None:
+def send_error_email(config, subject, body):
     if not config.mail.error_email:
         logging.warning("Error email recipients are not configured. Error email skipped.")
         return
@@ -218,11 +218,11 @@ def send_error_email(config: AppConfig, subject: str, body: str) -> None:
         smtp.send_message(msg, to_addrs=config.mail.error_email)
 
 
-def delete_sent_dirs(source_dirs: List[Path]) -> List[Tuple[Path, str]]:
-    failed: List[Tuple[Path, str]] = []
+def delete_sent_dirs(source_dirs):
+    failed = []
     for source_dir in source_dirs:
         try:
-            shutil.rmtree(source_dir)
+            shutil.rmtree(str(source_dir))
             logging.info("Deleted sent folder: %s", source_dir)
         except Exception as exc:  # noqa: BLE001
             failed.append((source_dir, str(exc)))
@@ -230,32 +230,32 @@ def delete_sent_dirs(source_dirs: List[Path]) -> List[Tuple[Path, str]]:
     return failed
 
 
-def build_error_report(scan: ScanResult, delete_errors: List[Tuple[Path, str]]) -> str:
+def build_error_report(scan, delete_errors):
     lines = []
 
     if scan.invalid_dirs:
         lines.append("Невалидные папки:")
         for path, reason in scan.invalid_dirs:
-            lines.append(f"- {path}: {reason}")
+            lines.append("- {}: {}".format(path, reason))
 
     if scan.orphan_files:
         if lines:
             lines.append("")
         lines.append("Файлы вне папок:")
         for path, reason in scan.orphan_files:
-            lines.append(f"- {path}: {reason}")
+            lines.append("- {}: {}".format(path, reason))
 
     if delete_errors:
         if lines:
             lines.append("")
         lines.append("Папки, которые были отправлены, но не удалены:")
         for path, reason in delete_errors:
-            lines.append(f"- {path}: {reason}")
+            lines.append("- {}: {}".format(path, reason))
 
     return "\n".join(lines) if lines else "Ошибок не detected."
 
 
-def main() -> int:
+def main():
     config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("config.json")
     config = load_config(config_path)
     setup_logging(config.log_file)
@@ -289,7 +289,7 @@ def main() -> int:
         send_email_with_attachment(config, archive_path)
         logging.info("Archive sent successfully to: %s", ", ".join(config.mail.to_email))
 
-        delete_errors: List[Tuple[Path, str]] = []
+        delete_errors = []
         if config.delete_sent_folders:
             delete_errors = delete_sent_dirs(scan.valid_dirs)
 
@@ -312,7 +312,7 @@ def main() -> int:
             send_error_email(
                 config,
                 subject="Критическая ошибка выгрузки субсидий",
-                body=f"Script failed with error:\n{exc}",
+                body="Script failed with error:\n{}".format(exc),
             )
         except Exception:
             logging.exception("Failed to send fatal error email.")
