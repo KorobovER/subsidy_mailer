@@ -1,0 +1,19 @@
+{
+  "source_dir": "C:/data/subsidies",
+  "archive_dir": "./archives",
+  "delete_sent_folders": true,
+  "log_file": "./logs/subsidy_mailer.log",
+  "mail": {
+    "smtp_host": "smtp.your-server.ru",
+    "smtp_port": 587,
+    "smtp_username": "robot@your-company.ru",
+    "smtp_password": "CHANGE_ME",
+    "use_tls": true,
+    "from_email": "robot@your-company.ru",
+    "to_email": ["recipient@your-company.ru"],
+    "cc_email": ["copy@your-company.ru"],
+    "error_email": ["admin@your-company.ru"],
+    "subject": "Выгрузка субсидий",
+    "body": "Добрый день!\n\nВо вложении архив с выгрузкой субсидий.\n\nЭто письмо сформировано автоматически."
+  }
+}
