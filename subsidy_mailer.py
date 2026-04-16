@@ -109,6 +109,11 @@ def scan_source_dir(source_dir):
 
     for child in sorted(source_dir.iterdir()):
         if child.is_dir():
+            # Exception: folder "000Прочее_(000)" is always valid without validation
+            if child.name == "000Прочее_(000)":
+                valid_dirs.append(child)
+                continue
+
             files = [file for file in child.iterdir() if file.is_file()]
             file_names = sorted(file.name for file in files)
             extensions = sorted(file.suffix.lower() for file in files)
