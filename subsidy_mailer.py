@@ -26,12 +26,15 @@ class MailConfig(object):
 
 
 class AppConfig(object):
-    def __init__(self, source_dir, archive_dir, delete_sent_folders, log_file, mail):
+    def __init__(self, source_dir, archive_dir, delete_sent_folders, log_file, mail,
+                 source_dir_tom_rn=None, to_email_tom_rn=None):
         self.source_dir = source_dir
         self.archive_dir = archive_dir
         self.delete_sent_folders = delete_sent_folders
         self.log_file = log_file
         self.mail = mail
+        self.source_dir_tom_rn = source_dir_tom_rn
+        self.to_email_tom_rn = to_email_tom_rn
 
 
 class ScanResult(object):
@@ -72,12 +75,17 @@ def load_config(config_path):
             subject="", body=""
         )
 
+    source_dir_tom_rn = raw.get("source_dir_tom_rn")
+    to_email_tom_rn = raw.get("to_email_tom_rn")
+
     return AppConfig(
         source_dir=Path(raw["source_dir"]),
         archive_dir=Path(raw.get("archive_dir", "./archives")),
         delete_sent_folders=bool(raw.get("delete_sent_folders", True)),
         log_file=Path(raw.get("log_file", "./subsidy_mailer.log")),
         mail=mail,
+        source_dir_tom_rn=Path(source_dir_tom_rn) if source_dir_tom_rn else None,
+        to_email_tom_rn=_to_list(to_email_tom_rn) if to_email_tom_rn else None,
     )
 
 
@@ -177,13 +185,13 @@ def create_archive(source_dirs, archive_dir):
     return Path(archive_path)
 
 
-def send_email_with_attachment(config, attachment_path):
+def send_email_with_attachment(config, attachment_path, to_email, cc_email):
     msg = EmailMessage()
     msg["Subject"] = config.mail.subject
     msg["From"] = config.mail.from_email
-    msg["To"] = ", ".join(config.mail.to_email)
-    if config.mail.cc_email:
-        msg["Cc"] = ", ".join(config.mail.cc_email)
+    msg["To"] = ", ".join(to_email)
+    if cc_email:
+        msg["Cc"] = ", ".join(cc_email)
     msg.set_content(config.mail.body)
 
     with attachment_path.open("rb") as f:
@@ -194,7 +202,7 @@ def send_email_with_attachment(config, attachment_path):
             filename=attachment_path.name,
         )
 
-    recipients = config.mail.to_email + config.mail.cc_email
+    recipients = to_email + cc_email
 
     with smtplib.SMTP(config.mail.smtp_host, config.mail.smtp_port, timeout=60) as smtp:
         if config.mail.use_tls:
@@ -260,15 +268,10 @@ def build_error_report(scan, delete_errors):
     return "\n".join(lines) if lines else "Ошибок не detected."
 
 
-def main():
-    config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("config.json")
-    config = load_config(config_path)
-    setup_logging(config.log_file)
-
-    logging.info("Started processing. Source dir: %s", config.source_dir)
-
+def process_directory(config, source_dir, to_email, cc_email):
+    logging.info("Started processing. Source dir: %s", source_dir)
     try:
-        scan = scan_source_dir(config.source_dir)
+        scan = scan_source_dir(source_dir)
         logging.info("Valid folders found: %s", len(scan.valid_dirs))
         logging.info("Invalid folders found: %s", len(scan.invalid_dirs))
         logging.info("Orphan files found: %s", len(scan.orphan_files))
@@ -291,8 +294,8 @@ def main():
         archive_path = create_archive(scan.valid_dirs, config.archive_dir)
         logging.info("Archive created: %s", archive_path)
 
-        send_email_with_attachment(config, archive_path)
-        logging.info("Archive sent successfully to: %s", ", ".join(config.mail.to_email))
+        send_email_with_attachment(config, archive_path, to_email, cc_email)
+        logging.info("Archive sent successfully to: %s", ", ".join(to_email))
 
         delete_errors = []
         if config.delete_sent_folders:
@@ -322,6 +325,21 @@ def main():
         except Exception:
             logging.exception("Failed to send fatal error email.")
         return 99
+
+
+def main():
+    config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("config.json")
+    config = load_config(config_path)
+    setup_logging(config.log_file)
+
+    exit_code = process_directory(config, config.source_dir, config.mail.to_email, config.mail.cc_email)
+
+    if config.source_dir_tom_rn and config.to_email_tom_rn:
+        exit_code_2 = process_directory(config, config.source_dir_tom_rn, config.to_email_tom_rn, [])
+        if exit_code_2 != 0 and exit_code == 0:
+            exit_code = exit_code_2
+
+    return exit_code
 
 
 if __name__ == "__main__":
